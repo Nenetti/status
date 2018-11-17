@@ -22,15 +22,18 @@ import java.io.File;
 
 import javax.swing.JFrame;
 
+import javafx.animation.Animation;
+import javafx.animation.Interpolator;
+import javafx.animation.RotateTransition;
 import javafx.scene.control.Label;
 import javafx.scene.text.Font;
+import javafx.util.Duration;
 import org.apache.commons.logging.Log;
 import org.ros.message.MessageListener;
 import org.ros.namespace.GraphName;
 import org.ros.node.AbstractNodeMain;
 import org.ros.node.ConnectedNode;
 import org.ros.node.NodeMain;
-import org.ros.node.topic.Subscriber;
 
 import javafx.application.Platform;
 import javafx.embed.swing.JFXPanel;
@@ -43,113 +46,136 @@ import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.AnchorPane;
 import javafx.scene.paint.Color;
 import ros.NodeHandle;
+import ros.ServiceServer;
+import ros.Subscriber;
 import ros.UserProperty;
 import std_msgs.Int32;
 
 public class Main extends NodeHandle {
 
-	private String imgPath;
-	private AnchorPane root;
-	private ImageView speaker_img;
-	private ImageView mic_img;
 
-	private final static int width=1280;
-	private final static int height=720;
+    private final static int width = 1280;
+    private final static int height = 720;
 
-	@Override
-	public GraphName getDefaultNodeName() {
-		return GraphName.of("status");
-	}
+    private String imgPath;
+    private AnchorPane root;
+    private ImageView sound_ImageView;
+    private ImageView robot_img;
 
-	@Override
-	public void start() {
-		imgPath= UserProperty.get("ros.image.dir");
-		createWindow();
-		/*Subscriber<std_msgs.String> expression=connectedNode.newSubscriber("status/expression", std_msgs.String._TYPE);
-		expression.addMessageListener((message)->{
+    private Label main_label;
+    private Label sub_label;
+    private Image speaker_on;
+    private Image speaker_off;
+    private Image mic_on;
+    private Image mic_off;
 
-		});
-		Subscriber<std_msgs.String> mic=connectedNode.newSubscriber("status/mic", std_msgs.String._TYPE);
-		mic.addMessageListener((message)->{
-			switch (message.getData()) {
-				case "on":
-					changeMicImg("mic_on.png");
-					break;
-				case "off":
-					changeMicImg("mic_off.png");
-					break;
-			}
-		});
-		Subscriber<std_msgs.String> speaker=connectedNode.newSubscriber("status/speaker", std_msgs.String._TYPE);
-		speaker.addMessageListener(new MessageListener<std_msgs.String>() {
-			@Override
-			public void onNewMessage(std_msgs.String message) {
-				switch (message.getData()) {
-					case "on":
-						changeSpeakerImg("speaker_on.png");
-						break;
-					case "off":
-						changeSpeakerImg("speaker_off.png");
-						break;
-				}
-			}
-		});*/
-	}
+    @Override
+    public GraphName getDefaultNodeName() {
+        return GraphName.of("status");
+    }
+
+    @Override
+    public void start() {
+        createWindow(UserProperty.getKey("status.fxml.dir"));
+
+        Subscriber main_subscriber = new Subscriber("status/main_text", std_msgs.String._TYPE);
+        main_subscriber.addMessageListener((message) -> {
+            String data = ((std_msgs.String) message).getData().replaceAll(",", "");
+            Platform.runLater(() -> {
+                main_label.setText(data);
+            });
+        });
+        Subscriber sub_subscriber = new Subscriber("status/sub_text", std_msgs.String._TYPE);
+        sub_subscriber.addMessageListener((message) -> {
+            String data = ((std_msgs.String) message).getData().replaceAll(",", "");
+            Platform.runLater(() -> {
+                sub_label.setText(data);
+            });
+        });
+        Subscriber speaker_subscriber = new Subscriber("status/speaker", std_msgs.String._TYPE);
+        speaker_subscriber.addMessageListener((message) -> {
+            switch (((std_msgs.String) message).getData()) {
+                case "ON":
+                    Platform.runLater(() -> {
+                        sound_ImageView.setImage(speaker_on);
+                    });
+                    break;
+                case "OFF":
+                    Platform.runLater(() -> {
+                        sound_ImageView.setImage(speaker_off);
+                    });
+                    break;
+            }
+        });
+        Subscriber mic_subscriber = new Subscriber("status/mic", std_msgs.String._TYPE);
+        mic_subscriber.addMessageListener((message) -> {
+            switch (((std_msgs.String) message).getData()) {
+                case "ON":
+                    Platform.runLater(() -> {
+                        sound_ImageView.setImage(mic_on);
+                    });
+                    break;
+                case "OFF":
+                    Platform.runLater(() -> {
+                        sound_ImageView.setImage(mic_off);
+                    });
+                    break;
+            }
+        });
+    }
+
+    public void load() {
+        imgPath = UserProperty.getKey("ros.image.dir");
+        speaker_on = NodeFX.toImage(imgPath + "/" + UserProperty.getKey("Speaker_ON"));
+        speaker_off = NodeFX.toImage(imgPath + "/" + UserProperty.getKey("Speaker_OFF"));
+        mic_on = NodeFX.toImage(imgPath + "/" + UserProperty.getKey("Mic_ON"));
+        mic_off = NodeFX.toImage(imgPath + "/" + UserProperty.getKey("Mic_OFF"));
+    }
 
     /********************
      *
      */
-    public void createWindow() {
-		JFrame frame=new JFrame();
-		JFXPanel panel=new JFXPanel();
-		frame.add(panel);
-		root=new AnchorPane();
-		Scene scene=new Scene(root, width, height);
-		panel.setScene(scene);
-		frame.setSize(width,height);
-		frame.setVisible(true);
-		panel.setSize(width,height);
-		speaker_img=new ImageView();
-		mic_img=new ImageView();
-		Label label=new Label();
-		Platform.runLater(()->{
-			root.getChildren().add(new ImageView(toImage("robot.png")));
-			root.getChildren().add(label);
-			label.relocate(width/2, height/2);
-			label.setText("How are you");
-			label.setFont(new Font(40));
-			label.setStyle("");
+    public void createWindow(String fxml) {
+        JFrame frame = new JFrame();
+        JFXPanel panel = new JFXPanel();
+        load();
+        root = new AnchorPane();
+        NodeFX nodeFX = new NodeFX(fxml);
+        Scene scene = new Scene(nodeFX.getRoot(), width, height);
+        panel.setScene(scene);
+        frame.add(panel);
+        frame.setSize(width, height);
+        frame.setLocation(0, 0);
+        frame.setVisible(true);
 
 
+        main_label = nodeFX.getLabel("Main_Label");
+        sub_label = nodeFX.getLabel("Sub_Label");
+        sound_ImageView = nodeFX.getImageView("Sound_Image");
+        sound_ImageView.setImage(mic_on);
+        robot_img = nodeFX.getImageView("Robot_Image");
+        /*RotateTransition animation=new RotateTransition();
+        animation.setNode(mic_img);
+        animation.setDuration(Duration.millis(1000));
+        animation.setFromAngle(-30);
+        animation.setToAngle(30);
+        animation.setCycleCount(-1);
+        animation.setAutoReverse(true);
+        animation.play();*/
+        Platform.runLater(() -> {
+            //changeSpeakerImg("speaker_off.png");
+            //changeMicImg("mic_off.png");
+            robot_img.setImage(toImage("front_Duck.png"));
+            //speaker_img.relocate(width/2-speaker_img.getImage().getWidth()*2, height-speaker_img.getImage().getHeight()-100);
+            //mic_img.relocate(width/2+mic_img.getImage().getWidth(), height-mic_img.getImage().getHeight()-100);
+            //pane.getChildren().addAll(speaker_img, mic_img);
+        });
+    }
 
 
-
-
-
-
-
-
-
-
-
-			//changeSpeakerImg("speaker_off.png");
-			//changeMicImg("mic_off.png");
-			//speaker_img.relocate(width/2-speaker_img.getImage().getWidth()*2, height-speaker_img.getImage().getHeight()-100);
-			//mic_img.relocate(width/2+mic_img.getImage().getWidth(), height-mic_img.getImage().getHeight()-100);
-			//pane.getChildren().addAll(speaker_img, mic_img);
-		});
-	}
-
-	public void changeSpeakerImg(String fileName) {
-		speaker_img.setImage(new Image(new File(imgPath+fileName).toURI().toString()));
-	}
-	public void changeMicImg(String fileName) {
-		mic_img.setImage(new Image(new File(imgPath+fileName).toURI().toString()));
-	}
-
-	public Image toImage(String fileName){
-    	return  new Image(new File(imgPath+"/"+fileName).toURI().toString());
-	}
+    public Image toImage(String fileName) {
+        return new Image(new File(imgPath + "/" + fileName).toURI().toString());
+    }
 
 
 }
