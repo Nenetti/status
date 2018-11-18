@@ -1,19 +1,3 @@
-/*
- * Copyright (C) 2014 ubuntu.
- *
- * Licensed under the Apache License, Version 2.0 (the "License"); you may not
- * use this file except in compliance with the License. You may obtain a copy of
- * the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
- * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
- * License for the specific language governing permissions and limitations under
- * the License.
- */
-
 
 import java.awt.GraphicsDevice;
 import java.awt.GraphicsEnvironment;
@@ -58,7 +42,6 @@ public class Main extends NodeHandle {
     private final static int height = 720;
 
     private String imgPath;
-    private AnchorPane root;
     private ImageView sound_ImageView;
     private ImageView robot_img;
 
@@ -68,6 +51,9 @@ public class Main extends NodeHandle {
     private Image speaker_off;
     private Image mic_on;
     private Image mic_off;
+    private Image duck_normal;
+    private Image duck_move;
+    private Image duck_success;
 
     @Override
     public GraphName getDefaultNodeName() {
@@ -78,21 +64,51 @@ public class Main extends NodeHandle {
     public void start() {
         createWindow(UserProperty.getKey("status.fxml.dir"));
 
-        Subscriber main_subscriber = new Subscriber("status/main_text", std_msgs.String._TYPE);
+        Subscriber main_subscriber = new Subscriber("/rione/status/main_text", std_msgs.String._TYPE);
+        Subscriber sub_subscriber = new Subscriber("/rione/status/sub_text", std_msgs.String._TYPE);
+        Subscriber status_subscriber = new Subscriber("/rione/status/status", std_msgs.Int32._TYPE);
+        Subscriber speaker_subscriber = new Subscriber("/rione/status/speaker", std_msgs.String._TYPE);
+        Subscriber mic_subscriber = new Subscriber("/rione/status/mic", std_msgs.String._TYPE);
+        status_subscriber.addMessageListener((message)->{
+            int statusID=((std_msgs.Int32)message).getData();
+            switch (statusID) {
+                case 0:        //PENDING:		未処理(待機)
+                    Platform.runLater(() -> {
+                        robot_img.setImage(duck_normal);
+                    });
+                    break;
+                case 1:        //ACTIVE:		処理中(移動中)
+                    Platform.runLater(() -> {
+                        robot_img.setImage(duck_move);
+                    });
+                    break;
+                case 3:        //SUCCEEDED:	完了(待機)
+                    Platform.runLater(() -> {
+                        robot_img.setImage(duck_success);
+                    });
+                    break;
+
+                case 2:        //PREEMPTED:	キャンセル受信
+                case 4:        //ABORTED:		不正中断
+                case 5:        //REJECTED:		目標に到達不可
+                case 6:        //PREEMPTING:	キャンセル受信
+                case 7:        //RECALLING:	実行前にキャンセル
+                case 8:        //RECALLED:		実行前にキャンセル
+                case 9:        //LOST:			amcl停止？
+            }
+        });
         main_subscriber.addMessageListener((message) -> {
             String data = ((std_msgs.String) message).getData().replaceAll(",", "");
             Platform.runLater(() -> {
                 main_label.setText(data);
             });
         });
-        Subscriber sub_subscriber = new Subscriber("status/sub_text", std_msgs.String._TYPE);
         sub_subscriber.addMessageListener((message) -> {
             String data = ((std_msgs.String) message).getData().replaceAll(",", "");
             Platform.runLater(() -> {
                 sub_label.setText(data);
             });
         });
-        Subscriber speaker_subscriber = new Subscriber("status/speaker", std_msgs.String._TYPE);
         speaker_subscriber.addMessageListener((message) -> {
             switch (((std_msgs.String) message).getData()) {
                 case "ON":
@@ -107,7 +123,6 @@ public class Main extends NodeHandle {
                     break;
             }
         });
-        Subscriber mic_subscriber = new Subscriber("status/mic", std_msgs.String._TYPE);
         mic_subscriber.addMessageListener((message) -> {
             switch (((std_msgs.String) message).getData()) {
                 case "ON":
@@ -126,10 +141,13 @@ public class Main extends NodeHandle {
 
     public void load() {
         imgPath = UserProperty.getKey("ros.image.dir");
-        speaker_on = NodeFX.toImage(imgPath + "/" + UserProperty.getKey("Speaker_ON"));
-        speaker_off = NodeFX.toImage(imgPath + "/" + UserProperty.getKey("Speaker_OFF"));
-        mic_on = NodeFX.toImage(imgPath + "/" + UserProperty.getKey("Mic_ON"));
-        mic_off = NodeFX.toImage(imgPath + "/" + UserProperty.getKey("Mic_OFF"));
+        speaker_on = NodeFX.toImage(imgPath + "/" + UserProperty.getKey("speaker.on"));
+        speaker_off = NodeFX.toImage(imgPath + "/" + UserProperty.getKey("speaker.off"));
+        mic_on = NodeFX.toImage(imgPath + "/" + UserProperty.getKey("mic.on"));
+        mic_off = NodeFX.toImage(imgPath + "/" + UserProperty.getKey("mic.off"));
+        duck_normal=NodeFX.toImage(imgPath + "/" + UserProperty.getKey("duck.normal"));
+        duck_move=NodeFX.toImage(imgPath + "/" + UserProperty.getKey("duck.move"));
+        duck_success=NodeFX.toImage(imgPath + "/" + UserProperty.getKey("duck.success"));
     }
 
     /********************
@@ -139,7 +157,6 @@ public class Main extends NodeHandle {
         JFrame frame = new JFrame();
         JFXPanel panel = new JFXPanel();
         load();
-        root = new AnchorPane();
         NodeFX nodeFX = new NodeFX(fxml);
         Scene scene = new Scene(nodeFX.getRoot(), width, height);
         panel.setScene(scene);
@@ -148,34 +165,13 @@ public class Main extends NodeHandle {
         frame.setLocation(0, 0);
         frame.setVisible(true);
 
-
         main_label = nodeFX.getLabel("Main_Label");
         sub_label = nodeFX.getLabel("Sub_Label");
         sound_ImageView = nodeFX.getImageView("Sound_Image");
-        sound_ImageView.setImage(mic_on);
         robot_img = nodeFX.getImageView("Robot_Image");
-        /*RotateTransition animation=new RotateTransition();
-        animation.setNode(mic_img);
-        animation.setDuration(Duration.millis(1000));
-        animation.setFromAngle(-30);
-        animation.setToAngle(30);
-        animation.setCycleCount(-1);
-        animation.setAutoReverse(true);
-        animation.play();*/
         Platform.runLater(() -> {
-            //changeSpeakerImg("speaker_off.png");
-            //changeMicImg("mic_off.png");
-            robot_img.setImage(toImage("front_Duck.png"));
-            //speaker_img.relocate(width/2-speaker_img.getImage().getWidth()*2, height-speaker_img.getImage().getHeight()-100);
-            //mic_img.relocate(width/2+mic_img.getImage().getWidth(), height-mic_img.getImage().getHeight()-100);
-            //pane.getChildren().addAll(speaker_img, mic_img);
+            sound_ImageView.setImage(mic_on);
+            robot_img.setImage(duck_normal);
         });
     }
-
-
-    public Image toImage(String fileName) {
-        return new Image(new File(imgPath + "/" + fileName).toURI().toString());
-    }
-
-
 }
